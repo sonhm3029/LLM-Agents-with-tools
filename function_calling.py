@@ -2,6 +2,8 @@ import instructor
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
+import requests
+import json
 
 load_dotenv()
 
@@ -26,6 +28,18 @@ tools = [
     }
 ]
 
+def get_user_location():
+    r = requests.post(
+        'https://www.googleapis.com/geolocation/v1/geolocate',
+        params={
+            "key": os.environ["GOOGLE_API_KEY"]}, json={"homeMobileCountryCode":310,
+    "homeMobileNetworkCode":410,
+    "radioType":"gsm",
+    "carrier":"Vodafone",
+    "considerIp":True})
+    # Export the data for use in future steps
+    return r.json()
+
 while True:
     msg = input("User > ")
     messages.append({
@@ -39,7 +53,17 @@ while True:
     )
     print(response)
     answer = response.choices[0].message.content
-    messages.append({
-        "role": "assistant",
-        "content": answer
-    })
+    if not answer and response.choices[0].finish_reason=="tool_calls":
+        tool_call = response.choices[0].message.tool_calls[0]
+        # arguments = json.loads(tool_call['function']['arguments'])
+        location = get_user_location()
+        print(f"LOC: {location}")
+        messages = messages + [
+            response.choices[0].message,
+            {"role": "tool", "content": json.dumps(location), "tool_call_id": tool_call.id}
+        ]
+    else: 
+        messages.append({
+            "role": "assistant",
+            "content": answer
+        })
